@@ -1,0 +1,27 @@
+{
+	"manifest-version": 1,
+
+	"name": "databox-driver-strava",
+	"databox-type": "driver",
+	"version": "0.1.0",
+
+	"description": "A driver for the Strava API.",
+	"author": "Chris Greenhalgh <chris.greenhalgh@nottingham.ac.uk>",
+	"license": "MIT",
+	"tags": [
+		"strava",
+		"gloang"
+	],
+
+	"homepage": "https://github.com/cgreenhalgh/databox-driver-strava",
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/cgreenhalgh/databox-driver-strava"
+	},
+
+
+	"resource-requirements": {
+		"store": ["store-json"]
+	}
+
+}
