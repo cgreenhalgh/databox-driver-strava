@@ -17,6 +17,7 @@ WORKDIR /root
 COPY --from=gobuild /app .
 COPY --from=gobuild /www/ /root/www/
 COPY --from=gobuild /tmpl/ /root/tmpl/
+COPY --from=gobuild /etc/ /root/etc/
 LABEL databox.type="driver"
 EXPOSE 8080
 

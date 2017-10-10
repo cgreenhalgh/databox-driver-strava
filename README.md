@@ -66,3 +66,50 @@ Hmm, I still don't see it in the driver list.
 
 Try two-phase build and normal deploy...
 
+Works, but why is it different? (I even briefly saw the container appear 
+when switching over).
+
+## Oauth notes
+
+Won't auth in iframe - need to redirect top-level (parent?!) browser,
+and then link back into the right place in the app.
+
+Will white-list localhost, but on phone that would have to be the App 
+rather than in a browser (no implicit grant flow).
+
+Browser needs the authorization URL and the client_id and a few other
+required pameters (response_type=code, scope=view_private), while server
+also needs the token request URL and client_secret (plus the returned
+code) to complete the exchange and obtain the access token for subsequent
+calls.
+
+So, service config:
+- request_uri - minus client_id and redirect_uri value
+- token_uri - minus client_id, client_secret and code
+
+App-specific service config:
+- client_id
+- client_secret
+
+User-specific config:
+- activity_since
+- poll?
+- poll pattern (cron-style??)
+
+State:
+- authorized?
+- authentication token
+- athlete id
+- cache athlete information, e.g. firstname, lastname
+- (last) activity count
+- last activity start_date
+
+Note: athletes/ID/stats is recommended polling point; check 
+all_ride_totals.count
+Then athlete/activities?after=START_DATE
+
+## Install
+
+Note: copy etc/oauth.json.template to etc/oauth.json and fill in 
+client_id and client_secret from the Strava app.
+
