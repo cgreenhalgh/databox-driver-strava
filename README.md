@@ -29,6 +29,13 @@ Create databox-manifest based on
 being sure to change the name (and preferably the description,
 author, tags, homepage and repository.
 
+Copy in the static JS and CSS files.
+Touch main.js.
+Copy in app/main.go and rip out all the unneeded stuff to do with plugs
+(leave the web server, status).
+
+## Dev build
+
 Now we can (re)build it:
 ```
 docker build -t databox-driver-strava -f Dockerfile.dev .
@@ -41,20 +48,14 @@ Try starting the (empty) driver.
 It may not appear in the list of drivers. Perhaps this is because there 
 no web server running to return a status?
 
-Try entering the container (you'll need to find its ID using `docker ps`).
-```
-docker exec -it CONTAINERID /bin/sh
-```
-
 To copy files into the container:
 ```
 docker cp . CONTAINERID:/root/
 ```
-
-Copy in the static JS and CSS files.
-Touch main.js.
-Copy in app/main.go and rip out all the unneeded stuff to do with plugs
-(leave the web server, status).
+Try entering the container (you'll need to find its ID using `docker ps`).
+```
+docker exec -it CONTAINERID /bin/sh
+```
 
 Build and run...
 ```
@@ -62,7 +63,9 @@ GGO_ENABLED=0 GOOS=linux go build -a -tags netgo -installsuffix netgo -ldflags '
 ./app
 ```
 
-Hmm, I still don't see it in the driver list.
+Note: need to ensure image is labelled with databox.type = driver.
+
+## Normal build / deploy
 
 Try two-phase build and normal deploy...
 
