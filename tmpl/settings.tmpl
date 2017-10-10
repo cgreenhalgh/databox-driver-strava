@@ -14,9 +14,11 @@
     </head>
     <body>
        
-        <h1>Hello</h1>
-	<a target="_parent" href="https://www.strava.com/oauth/authorize?client_id=20721&response_type=code&redirect_uri=http://127.0.0.1:8989/%23!/databox-driver-strava/ui&scope=view_private&approval_prompt=force">Link to Strava account</a>
-        <script>document.write('<script src="ui/static/js/vendor/jquery-1.11.2.min.js"><\/script>')</script>
+        <h1>Hello {{.Firstname}} {{.Lastname}} ({{.AthleteID}})</h1>
+        <script>var authUri="{{.AuthUri}}client_id={{.ClientID}}&"</script>
+	<input type="button" id="openStrava" value="Link to Strava account">
+	{{ if .Authorized }} Poll {{ end }} 
+        <script src="ui/static/js/vendor/jquery-1.11.2.min.js"></script>
         <script src="ui/static/js/main.js"></script>
     </body>
 </html>
