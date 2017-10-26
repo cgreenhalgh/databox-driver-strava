@@ -138,7 +138,12 @@ Q. How is the go http server threaded? what concurrency control is needed? can i
 A. THreaded using standard go runtime support for go routines which appears to generate threads as required to back go routines. So go routines can be running in different threads. 
 Go up front recommends using channels (like erlang) rather than shared state, but does provide mutexes, etc. However this is qualified [here](https://github.com/golang/go/wiki/MutexOrChannel) to suggest using mutexes for shared state.
 
+Q. Why does the databox library for GO just use string for all datastore return values?
+
 ### Notes
 
 Databox API driver/app list returns a lot of `docker inspect` information. Status appears to be `State:{status:...}`, which is usually `running`.
 
+Databox JSON store and timeseries store have different APIs for the same logical operations (e.g. since, range) so are not directly replacements. Parameters are handled differently.
+
+Note: GO Json store support incomplete: no since or range

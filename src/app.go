@@ -2,22 +2,26 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	//"fmt"
+	"html/template"
+	"io/ioutil"
 	"log"
 	"net/http"
 	"net/url"
 	"os"
 	//"strings"
-	"html/template"
-	"io/ioutil"
 	"strconv"
 	"sync"
+	"time"
 	
 	"github.com/gorilla/mux"
 	databox "github.com/me-box/lib-go-databox"
 )
 
 var dataStoreHref = os.Getenv("DATABOX_STORE_ENDPOINT")
+
+const DS_ACTIVITIES = "activities"
 
 func getStatusEndpoint(w http.ResponseWriter, req *http.Request) {
 	w.Write([]byte("active\n"))
@@ -181,6 +185,150 @@ func authCallback(w http.ResponseWriter, req *http.Request) {
 	w.Write([]byte("<html><head><meta http-equiv=\"refresh\" content=\"0; URL="+string(url[0:ix+1])+"\" /></head></html>"))
 }
 */
+
+type SyncWorker struct {
+	Requests chan chan bool
+}
+var syncWorker = SyncWorker{Requests:make(chan chan bool)}// needed?
+
+// based on actual strava API value
+type StravaActivity struct {
+	ID int64 `json:"id"`
+	Name string `json:"name"`
+	Distance float64 `json:"distance"`
+	MovingTime float64 `json:"moving_time"`
+	ElapsedTime float64 `json:"elapsed_time"`
+	Type string `json:"type"` // "ride"
+	StartDate time.Time `json:"start_date"` // e.g. "2013-08-24T00:04:12Z"
+	Timezone string `json:"timezone"`
+}
+
+type DataStoreEntry struct {
+	//data 
+	Timestamp int64 `json:"timestamp"`
+}
+
+type StravaActivityDSE struct {
+	Timestamp int64 `json:"timestamp"`
+	//*DataStoreEntry
+	Data StravaActivity `json:"data"`
+}
+
+func syncInternal(accessToken string) (bool, error) {
+	// see http://strava.github.io/api/v3/activities/#get-activities
+	url := "https://www.strava.com/api/v3/athlete/activities"
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		log.Printf("Error creating strava request: %s", err.Error())
+		return false, err
+	}
+	client := &http.Client{}
+	req.Header.Add("Authorization", "Bearer "+accessToken)
+	res, err := client.Do(req)
+	if err != nil {
+		log.Printf("Error doing strava get activities: %s", err.Error())
+		return false, err
+	}
+	if res.StatusCode != 200 {
+		log.Printf("Error doing strava get activities: status code %d", res.StatusCode)
+		return false, errors.New("Status code not 200")
+	}
+	body, err := ioutil.ReadAll(res.Body)
+	if err != nil {
+		log.Printf("Error reading strava get activities response: %s", err.Error())
+		return false, err
+	}
+	//log.Printf("Got activities: %s", body)
+	var activities []StravaActivity
+	err = json.Unmarshal(body, &activities)
+	if err != nil {
+		log.Printf("Error parsing strave get activities response: %s", err.Error())
+		return false, err
+	}
+	log.Printf("Got %d activities", len(activities))
+	
+	storeHref, _ := databox.GetStoreURLFromDsHref(dataStoreHref)
+	dsHref := storeHref + "/" + DS_ACTIVITIES
+	
+activityLoop:
+	for _,activity := range activities {
+		log.Printf("- %d: %s %s at %s (%d)", activity.ID, activity.Type, activity.Name, activity.StartDate, activity.StartDate.Unix())
+		// timestamps are Java-style UNIX ms (integers). Range query is inclusive
+		startTime := activity.StartDate.Unix()*1000
+//		res,err := databox.StoreTsRange(dsHref, int(startTime), int(startTime))
+		// range didn't return the right value!?
+		// ERROR: JSON store API for since and range are different to TS API!
+		// But not implemented in current GO client library
+		res,err := databox.StoreTsSince(dsHref, 0)
+		if err != nil {
+			log.Printf("Error checking store entry at %d: %s", startTime, err.Error())
+			return false,err
+		}
+		log.Printf("check range %d gave %s", startTime, res);
+		// timestamp
+		got := []StravaActivityDSE{}
+		err = json.Unmarshal([]byte(res), &got)
+		if err != nil {
+			log.Printf("Error unmarshalling existing values at %d: %s (%s)", startTime, err.Error(), res)
+			continue
+		}
+		for _,gotActivity := range got {
+			if gotActivity.Data.ID == activity.ID {
+				log.Printf("Already got activity %d", activity.ID)
+				continue activityLoop
+			}
+		}
+		dse := StravaActivityDSE{Timestamp:startTime, Data:activity}
+		dseData,err := json.Marshal(dse)
+		if err != nil {
+			log.Printf("Error marshalling new data item: %s", err.Error())
+			continue
+		}
+		log.Printf("write %s", string(dseData))
+		_,err = databox.StoreJSONWriteTs(dsHref, string(dseData))
+		if err != nil {
+			log.Printf("Error writing new data item to store: %s (%s)", err.Error, string(dseData))
+			continue;
+		}
+		// just one for now
+		break
+	}
+	
+	return true,nil
+}
+
+func (sw *SyncWorker) SyncWorkerServer() {
+	for {
+		//log.Print("Sync waiting")
+		req := <- sw.Requests
+		settingsLock.Lock()
+		accessToken := state.AccessToken
+		settingsLock.Unlock()
+		if accessToken == "" {
+			log.Print("Sync(internal) with no access token")
+			if req != nil {
+				req <- false
+			}
+		} else {
+			log.Print("Sync (internal)...")
+			res, _ := syncInternal(accessToken)
+			// signal done
+			if req != nil {
+				req <- res
+			}			
+		}
+	}
+}
+
+func doSync(w http.ResponseWriter, req *http.Request) {
+	log.Print("request sync...")
+	//rep := make(chan bool)
+	syncWorker.Requests <- nil //rep
+	w.Write([]byte("true\n"))
+	//<- rep
+	//log.Print("doSync complete");
+}
+
 type data struct {
 	Data string `json:"data"`
 }
@@ -226,6 +374,7 @@ func server(c chan bool) {
 	router.HandleFunc("/status", getStatusEndpoint).Methods("GET")
 	//router.HandleFunc("/ui/auth_callback", authCallback).Methods("GET")
 	router.HandleFunc("/ui", displayUI).Methods("GET")
+	router.HandleFunc("/ui/api/sync", doSync).Methods("POST")
 
 	static := http.StripPrefix("/ui/static", http.FileServer(http.Dir("./www/")))
 	router.PathPrefix("/ui/static").Handler(static)
@@ -235,15 +384,47 @@ func server(c chan bool) {
 	c <- true
 }
 
-func main() {
+func logFatalError(message string, err error) {
+	if  err != nil {
+		log.Printf("%s: %s", message, err.Error())	
+	} else {
+		log.Print(message)
+	}
+	settingsLock.Lock()
+	settings.Status = DRIVER_FATAL
+	settings.Error = message
+	settingsLock.Unlock()
+}
 
-	loadSettings()	
+func main() {
 
 	serverdone := make(chan bool)
 	go server(serverdone)
-		
+	go syncWorker.SyncWorkerServer()
+	
+	loadSettings()	
+
 	//Wait for my store to become active
 	databox.WaitForStoreStatus(dataStoreHref)
+
+	// register source
+	metadata := databox.StoreMetadata{
+		Description:    "Strava activities timeseries",
+		ContentType:    "application/json",
+		Vendor:         "Strava",
+		DataSourceType: "Strava-Activity",
+		DataSourceID:   DS_ACTIVITIES,
+		StoreType:      "store-json",
+		IsActuator:     false,
+		Unit:           "",
+		Location:       "",
+	}
+	_,err := databox.RegisterDatasource(dataStoreHref, metadata)
+	if err != nil {
+		logFatalError("Error registering activities datasource", err)
+	} else {
+		log.Printf("registered datasource %s", DS_ACTIVITIES)
+	}
 
 	_ = <-serverdone
 }

@@ -12,3 +12,16 @@ $( '#openStrava' ).on('click', function(event) {
 	window.parent.location.href = authUri+'redirect_uri='+encodeURIComponent(directUri /*+'/auth_callback'*/);
 	return false;
 });
+
+function doSync(event) {
+	event.preventDefault();
+	console.log('sync ');
+	$.post('./ui/api/sync', {})
+	.done(function () {
+		console.log('Done sync');
+	})
+	.fail(function() {
+		console.log('Error requesting sync');
+	});
+	return false;
+}
