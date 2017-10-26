@@ -2,7 +2,7 @@ package main
 
 import (
 	"encoding/json"
-	"fmt"
+	//"fmt"
 	"log"
 	"net/http"
 	"net/url"
@@ -11,6 +11,7 @@ import (
 	"html/template"
 	"io/ioutil"
 	"strconv"
+	"sync"
 	
 	"github.com/gorilla/mux"
 	databox "github.com/me-box/lib-go-databox"
@@ -34,7 +35,18 @@ type OauthConfig struct {
   ClientSecret string `json:"client_secret"`
 }
 
+type DriverStatus int
+
+const (
+	DRIVER_STARTING DriverStatus = iota
+	DRIVER_FATAL 
+	DRIVER_UNAUTHORIZED 
+	DRIVER_OK 
+)
+
 type Settings struct {
+  Status DriverStatus
+  Error string // if there is an error
   ClientID string
   AuthUri string
   Authorized bool
@@ -53,31 +65,32 @@ type State struct {
 func (state *State) Load() {
 	data,err := ioutil.ReadFile("etc/state.json")
 	if err != nil {
-		fmt.Print("Unable to read etc/state.json\n")
+		log.Print("Unable to read etc/state.json\n")
 		return
 	}
-	err = json.Unmarshal(data, &oauthConfig)
+	err = json.Unmarshal(data, &state)
 	if err != nil {
-		fmt.Printf("Unable to unmarshall etc/oauth.json: %s\n", string(data))
+		log.Printf("Unable to unmarshall etc/state.json: %s\n", string(data))
 		return
 	}
-	fmt.Print("Read etc/state.json\n")
+	log.Printf("Read etc/state.json: %s\n", string(data))
 }
 func (state *State) Save() {
 	data,err := json.Marshal(state)
 	if err != nil {
-		fmt.Printf("Unable to marshall state\n");
+		log.Printf("Unable to marshall state\n");
 		return
 	}
 	err = ioutil.WriteFile("etc/state.json", data, 0666);
 	if err != nil {
-		fmt.Print("Error writing etc/state.json\n")
+		log.Print("Error writing etc/state.json\n")
 		return
 	}
-	fmt.Print("Saved etc/state.json\n")
+	log.Print("Saved etc/state.json\n")
 }
 
-var settings = Settings{AuthUri: oauthUris.AuthUri, Authorized:false}
+var settingsLock = &sync.Mutex{}
+var settings = Settings{Status: DRIVER_STARTING, AuthUri: oauthUris.AuthUri, Authorized:false}
 var state = State{}
 
 type Athlete struct {
@@ -95,26 +108,27 @@ func handleOauthCode(code string) {
 	resp,err := http.PostForm(oauthUris.TokenUri, 
 		url.Values{"client_id":{oauthConfig.ClientID}, "client_secret":{oauthConfig.ClientSecret}, "code":{code}})
 	if err != nil {
-		fmt.Print("Error getting token")
+		log.Print("Error getting token\n")
 		return
 	}
 	defer resp.Body.Close()
 	body, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
-		fmt.Print("Error reading body of oauth token response")
+		log.Print("Error reading body of oauth token response\n")
 		return
 	} 
-	fmt.Printf("oauth token resp %s\n", string(body))
+	log.Printf("oauth token resp %s\n", string(body))
 	//state.AccessToken = code[0];
 	//state.Save()
 	var tokenResp = OauthTokenResp{}
 	err = json.Unmarshal(body, &tokenResp)
 	if err != nil {
-		fmt.Printf("Error unmarshalling oauth response: %s\n", string(body))
+		log.Printf("Error unmarshalling oauth response: %s\n", string(body))
 		return
 	}
 	//if tokenResp.AccessToken != nil {
-	fmt.Printf("Got access token %s\n", tokenResp.AccessToken)
+	log.Printf("Got access token %s\n", tokenResp.AccessToken)
+	settingsLock.Lock()
 	state.AccessToken = tokenResp.AccessToken
 	//if tokenResp.Athlete != nil {
 	state.AthleteID = strconv.FormatInt(tokenResp.Athlete.ID, 10)
@@ -127,6 +141,7 @@ func handleOauthCode(code string) {
 	settings.Lastname = state.Lastname
 	settings.AthleteID = state.AthleteID
 	//}
+	settingsLock.Unlock()
 }
 
 func displayUI(w http.ResponseWriter, req *http.Request) {
@@ -134,7 +149,7 @@ func displayUI(w http.ResponseWriter, req *http.Request) {
 	params := req.URL.Query()
 	codes := params["code"]
 	if codes != nil && len(codes)>0 {
-		fmt.Printf("code = %s\n", codes[0])
+		log.Printf("Got oauth response code = %s\n", codes[0])
 		code := codes[0]
 		handleOauthCode(code)
 	}
@@ -142,14 +157,16 @@ func displayUI(w http.ResponseWriter, req *http.Request) {
 	var templates *template.Template
 	templates, err := template.ParseFiles("tmpl/settings.tmpl")
 	if err != nil {
-		fmt.Println(err)
+		log.Printf("Error parsing template: %s", err.Error())
 		w.Write([]byte("error\n"))
 		return
 	}
 	s1 := templates.Lookup("settings.tmpl")
+	settingsLock.Lock()
 	err = s1.Execute(w,settings)
+	settingsLock.Unlock()
 	if err != nil {
-		fmt.Println(err)
+		log.Printf("Error filling template: %s", err.Error())
 		w.Write([]byte("error\n"))
 		return
 	}
@@ -158,7 +175,7 @@ func displayUI(w http.ResponseWriter, req *http.Request) {
 func authCallback(w http.ResponseWriter, req *http.Request) {
 	url := req.URL.String()
 	ix := strings.LastIndex(url,"/")
-	fmt.Printf("url %s -> %s\n", url, string(url[0:ix+1]))
+	log.Printf("url %s -> %s\n", url, string(url[0:ix+1]))
 	// proxy defeats redirect?
 	//http.Redirect(w, req, string(url[0:ix]), 302)
 	w.Write([]byte("<html><head><meta http-equiv=\"refresh\" content=\"0; URL="+string(url[0:ix+1])+"\" /></head></html>"))
@@ -170,20 +187,25 @@ type data struct {
 
 var oauthConfig OauthConfig
 
-func main() {
-
+func loadSettings() {
+	settingsLock.Lock()
+	defer settingsLock.Unlock()
 	// read config
 	data,err := ioutil.ReadFile("etc/oauth.json")
 	if err != nil {
-		fmt.Print("Unable to read etc/oauth.json")
-		panic(err)
+		log.Print("Unable to read etc/oauth.json\n")
+		settings.Status = DRIVER_FATAL
+		settings.Error = "The driver was not build correctly (unable to read etc/oauth.json)"
+		return
 	}
 	err = json.Unmarshal(data, &oauthConfig)
 	if err != nil {
-		fmt.Printf("Unable to unmarshall etc/oauth.json: %s\n", string(data))
-		panic(err)
+		log.Printf("Unable to unmarshall etc/oauth.json: %s\n", string(data))
+		settings.Status = DRIVER_FATAL
+		settings.Error = "The driver was not build correctly (unable to unmarshall etc/oauth.json)"
+		return
 	}
-	fmt.Printf("oauth config %s,%s from %s\n", oauthConfig.ClientID, oauthConfig.ClientSecret, string(data))
+	log.Printf("oauth config client ID %s\n", oauthConfig.ClientID)
 	settings.ClientID = oauthConfig.ClientID
 	
 	state.Load()
@@ -193,10 +215,9 @@ func main() {
 	settings.Firstname = state.Firstname
 	settings.Lastname = state.Lastname
 	settings.AthleteID = state.AthleteID
-	
-	//Wait for my store to become active
-	databox.WaitForStoreStatus(dataStoreHref)
+}
 
+func server(c chan bool) {
 	//
 	// Handle Https requests
 	//
@@ -209,5 +230,20 @@ func main() {
 	static := http.StripPrefix("/ui/static", http.FileServer(http.Dir("./www/")))
 	router.PathPrefix("/ui/static").Handler(static)
 
-	log.Fatal(http.ListenAndServeTLS(":8080", databox.GetHttpsCredentials(), databox.GetHttpsCredentials(), router))
+	http.ListenAndServeTLS(":8080", databox.GetHttpsCredentials(), databox.GetHttpsCredentials(), router)
+	log.Print("HTTP server exited?!")
+	c <- true
+}
+
+func main() {
+
+	loadSettings()	
+
+	serverdone := make(chan bool)
+	go server(serverdone)
+		
+	//Wait for my store to become active
+	databox.WaitForStoreStatus(dataStoreHref)
+
+	_ = <-serverdone
 }

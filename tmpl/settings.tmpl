@@ -13,8 +13,9 @@
         <script src="ui/static/js/vendor/modernizr-2.8.3.min.js"></script>
     </head>
     <body>
-       
+    {{ if .Error }} <p>Error: {{ .Error }}</p> {{ end }}
         <h1>Hello {{.Firstname}} {{.Lastname}} ({{.AthleteID}})</h1>
+        <p>Status: {{ .Status }}</p>
         <script>var authUri="{{.AuthUri}}client_id={{.ClientID}}&"</script>
 	<input type="button" id="openStrava" value="Link to Strava account">
 	{{ if .Authorized }} Poll {{ end }} 
