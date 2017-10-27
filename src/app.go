@@ -210,8 +210,7 @@ type DataStoreEntry struct {
 }
 
 type StravaActivityDSE struct {
-	//Timestamp int64 `json:"timestamp"`
-	Timestamp string `json:"timestamp"`
+	Timestamp int64 `json:"timestamp"`
 	//*DataStoreEntry
 	Data StravaActivity `json:"data"`
 }
@@ -257,24 +256,13 @@ activityLoop:
 		log.Printf("- %d: %s %s at %s (%d)", activity.ID, activity.Type, activity.Name, activity.StartDate, activity.StartDate.Unix())
 		// timestamps are Java-style UNIX ms (integers). Range query is inclusive
 		startTime := activity.StartDate.Unix()*1000
-		// range didn't return the right value!?
-		// ERROR: JSON store API for since and range are different to TS API!
-		// But not implemented in current GO client library
 		res,err := databox.StoreJSONGetrange(dsHref, startTime, startTime)
-		//res,err := databox.StoreJSONGetsince(dsHref, 0)
 		if err != nil {
 			log.Printf("Error checking store entry at %d: %s", startTime, err.Error())
 			return false,err
 		}
 		log.Printf("check %s JSON range %d gave %s", dsHref, startTime, res);
-		/*TEST
-		res,err = databox.StoreJSONGetlatest(dsHref)
-		if err != nil {
-			log.Printf("Error checking store entry at %d: %s", startTime, err.Error())
-			return false,err
-		}
-		log.Printf("check %s JSON latest gave %s", dsHref, res);
-		*/// timestamp
+		// timestamp
 		got := []StravaActivityDSE{}
 		err = json.Unmarshal([]byte(res), &got)
 		if err != nil {
@@ -287,9 +275,7 @@ activityLoop:
 				continue activityLoop
 			}
 		}
-		//dse := StravaActivityDSE{Timestamp:startTime, Data:activity}
-		// string ?!
-		dse := StravaActivityDSE{Timestamp:strconv.FormatInt(startTime, 10), Data:activity}
+		dse := StravaActivityDSE{Timestamp:startTime, Data:activity}
 		dseData,err := json.Marshal(dse)
 		if err != nil {
 			log.Printf("Error marshalling new data item: %s", err.Error())
@@ -301,8 +287,6 @@ activityLoop:
 			log.Printf("Error writing new data item to store: %s (%s)", err.Error, string(dseData))
 			continue;
 		}
-		// just one for now
-		break
 	}
 	
 	return true,nil
