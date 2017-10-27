@@ -147,3 +147,37 @@ Databox API driver/app list returns a lot of `docker inspect` information. Statu
 Databox JSON store and timeseries store have different APIs for the same logical operations (e.g. since, range) so are not directly replacements. Parameters are handled differently.
 
 Note: GO Json store support incomplete: no since or range
+
+### Debugging
+
+use `docker ps` to find the container ID for your driver and for the driver's store (image type store-json and name including your driver name).
+
+Check the logs with `docker logs CONTAINERID`
+
+Enter the JSON store with `docker exec -it CONTAINERID /bin/sh` and check the database directly:
+```
+mongo
+use db
+db.timesseries.find()
+db.KV.find()
+```
+
+### Fixing the go library
+
+Fork it. 
+Check out my version, make branch, checkout branch
+```
+git clone https://github.com/cgreenhalgh/lib-go-databox.git
+cd lib-go-databox
+git checkout -b store-json-extras
+```
+
+Update `app.go` to import my fork, `github.com/cgreenhalgh/lib-go-databox`.
+
+(repeatedly) copy my version into the dev container:
+```
+docker exec CONTAINERID mkdir -p /src/github.com/cgreenhalgh/lib-go-databox/
+docker cp CONTAINERID . /src/github.com/cgreenhalgh/lib-go-databox/
+```
+
+(Note: `go get github.com/cgreenhalgh/lib-go-databox` will only get the default HEAD, not a branch)

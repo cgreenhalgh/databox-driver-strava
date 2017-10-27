@@ -16,7 +16,8 @@ import (
 	"time"
 	
 	"github.com/gorilla/mux"
-	databox "github.com/me-box/lib-go-databox"
+	//databox "github.com/me-box/lib-go-databox"
+	databox "github.com/cgreenhalgh/lib-go-databox"
 )
 
 var dataStoreHref = os.Getenv("DATABOX_STORE_ENDPOINT")
@@ -209,7 +210,8 @@ type DataStoreEntry struct {
 }
 
 type StravaActivityDSE struct {
-	Timestamp int64 `json:"timestamp"`
+	//Timestamp int64 `json:"timestamp"`
+	Timestamp string `json:"timestamp"`
 	//*DataStoreEntry
 	Data StravaActivity `json:"data"`
 }
@@ -255,17 +257,24 @@ activityLoop:
 		log.Printf("- %d: %s %s at %s (%d)", activity.ID, activity.Type, activity.Name, activity.StartDate, activity.StartDate.Unix())
 		// timestamps are Java-style UNIX ms (integers). Range query is inclusive
 		startTime := activity.StartDate.Unix()*1000
-//		res,err := databox.StoreTsRange(dsHref, int(startTime), int(startTime))
 		// range didn't return the right value!?
 		// ERROR: JSON store API for since and range are different to TS API!
 		// But not implemented in current GO client library
-		res,err := databox.StoreTsSince(dsHref, 0)
+		res,err := databox.StoreJSONGetrange(dsHref, startTime, startTime)
+		//res,err := databox.StoreJSONGetsince(dsHref, 0)
 		if err != nil {
 			log.Printf("Error checking store entry at %d: %s", startTime, err.Error())
 			return false,err
 		}
-		log.Printf("check range %d gave %s", startTime, res);
-		// timestamp
+		log.Printf("check %s JSON range %d gave %s", dsHref, startTime, res);
+		/*TEST
+		res,err = databox.StoreJSONGetlatest(dsHref)
+		if err != nil {
+			log.Printf("Error checking store entry at %d: %s", startTime, err.Error())
+			return false,err
+		}
+		log.Printf("check %s JSON latest gave %s", dsHref, res);
+		*/// timestamp
 		got := []StravaActivityDSE{}
 		err = json.Unmarshal([]byte(res), &got)
 		if err != nil {
@@ -278,14 +287,16 @@ activityLoop:
 				continue activityLoop
 			}
 		}
-		dse := StravaActivityDSE{Timestamp:startTime, Data:activity}
+		//dse := StravaActivityDSE{Timestamp:startTime, Data:activity}
+		// string ?!
+		dse := StravaActivityDSE{Timestamp:strconv.FormatInt(startTime, 10), Data:activity}
 		dseData,err := json.Marshal(dse)
 		if err != nil {
 			log.Printf("Error marshalling new data item: %s", err.Error())
 			continue
 		}
 		log.Printf("write %s", string(dseData))
-		_,err = databox.StoreJSONWriteTs(dsHref, string(dseData))
+		err = databox.StoreJSONWriteTS(dsHref, string(dseData))
 		if err != nil {
 			log.Printf("Error writing new data item to store: %s (%s)", err.Error, string(dseData))
 			continue;
