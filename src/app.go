@@ -206,11 +206,11 @@ type StravaActivity struct {
 
 type DataStoreEntry struct {
 	//data 
-	Timestamp int64 `json:"timestamp"`
+	Timestamp float64 `json:"timestamp"`
 }
 
 type StravaActivityDSE struct {
-	Timestamp int64 `json:"timestamp"`
+	Timestamp float64 `json:"timestamp"`
 	//*DataStoreEntry
 	Data StravaActivity `json:"data"`
 }
@@ -254,19 +254,19 @@ func syncInternal(accessToken string) (bool, error) {
 activityLoop:
 	for _,activity := range activities {
 		log.Printf("- %d: %s %s at %s (%d)", activity.ID, activity.Type, activity.Name, activity.StartDate, activity.StartDate.Unix())
-		// timestamps are Java-style UNIX ms (integers). Range query is inclusive
-		startTime := activity.StartDate.Unix()*1000
+		// timestamps are Java-style UNIX ms (Number = double). Range query is inclusive
+		startTime := float64(activity.StartDate.Unix()*1000)
 		res,err := databox.StoreJSONGetrange(dsHref, startTime, startTime)
 		if err != nil {
-			log.Printf("Error checking store entry at %d: %s", startTime, err.Error())
+			log.Printf("Error checking store entry at %f: %s", startTime, err.Error())
 			return false,err
 		}
-		log.Printf("check %s JSON range %d gave %s", dsHref, startTime, res);
+		log.Printf("check %s JSON range %f gave %s", dsHref, startTime, res);
 		// timestamp
 		got := []StravaActivityDSE{}
 		err = json.Unmarshal([]byte(res), &got)
 		if err != nil {
-			log.Printf("Error unmarshalling existing values at %d: %s (%s)", startTime, err.Error(), res)
+			log.Printf("Error unmarshalling existing values at %f: %s (%s)", startTime, err.Error(), res)
 			continue
 		}
 		for _,gotActivity := range got {
