@@ -22,7 +22,12 @@ import (
 
 var dataStoreHref = os.Getenv("DATABOX_STORE_ENDPOINT")
 
+// Note: must match manifest!
+const STORE_TYPE = "store-json"
+
 const DS_ACTIVITIES = "activities"
+
+var activitiesTs,_ = databox.MakeStoreTimeSeries_0_2_0(dataStoreHref, DS_ACTIVITIES, STORE_TYPE)
 
 func getStatusEndpoint(w http.ResponseWriter, req *http.Request) {
 	w.Write([]byte("active\n"))
@@ -269,7 +274,7 @@ activityLoop:
 		log.Printf("- %d: %s %s at %s (%d)", activity.ID, activity.Type, activity.Name, activity.StartDate, activity.StartDate.Unix())
 		// timestamps are Java-style UNIX ms (Number = double). Range query is inclusive
 		startTime := float64(activity.StartDate.Unix()*1000)
-		res,err := databox.StoreJSONGetrange(dsHref, startTime, startTime)
+		res,err := activitiesTs.ReadRange(activity.StartDate, activity.StartDate)
 		if err != nil {
 			log.Printf("Error checking store entry at %f: %s", startTime, err.Error())
 			return false,err
@@ -288,16 +293,15 @@ activityLoop:
 				continue activityLoop
 			}
 		}
-		dse := StravaActivityDSE{Timestamp:startTime, Data:activity}
-		dseData,err := json.Marshal(dse)
+		newValue,err := json.Marshal(activity)
 		if err != nil {
 			log.Printf("Error marshalling new data item: %s", err.Error())
 			continue
 		}
-		log.Printf("write %s", string(dseData))
-		err = databox.StoreJSONWriteTS(dsHref, string(dseData))
+		log.Printf("write %s", string(newValue))
+		err = activitiesTs.WriteRawValueAt(string(newValue), activity.StartDate)
 		if err != nil {
-			log.Printf("Error writing new data item to store: %s (%s)", err.Error, string(dseData))
+			log.Printf("Error writing new data item to store: %s (%s at %s)", err.Error, string(newValue), activity.StartDate)
 			continue;
 		}
 		// latest?!
@@ -424,23 +428,21 @@ func logFatalError(message string, err error) {
 
 func getLatestActivity() {
 	// latest value?
-	storeHref, _ := databox.GetStoreURLFromDsHref(dataStoreHref)
-	dsHref := storeHref + "/" + DS_ACTIVITIES
-	res,err := databox.StoreJSONGetlatest(dsHref)
+	res,err := activitiesTs.ReadLatest()
 	if err != nil {
 		log.Printf("Error checking latest store entry: %s", err.Error())
+	} else if res=="" {
+		log.Print("Warning: get latest -> no value")
 	} else {
 		//log.Printf("check %s JSON latest gave %s", dsHref, res);
-		got := []StravaActivityDSE{}
+		got := StravaActivityDSE{}
 		err = json.Unmarshal([]byte(res), &got)
 		if err != nil {
 			log.Printf("Error unmarshalling latest value(s): %s (%s)", err.Error(), res)
-		} else if len(got)==0 {
-			log.Printf("Warning: get latest -> no values (%s)", res);
 		} else {
-			log.Printf("Initialise latest to %s at %s (%s)", got[0].Data.Name, got[0].Data.StartDate, res)
+			log.Printf("Initialise latest to %s at %s (%s)", got.Data.Name, got.Data.StartDate, res)
 			settingsLock.Lock()
-			settings.LatestActivity = got[0].Data
+			settings.LatestActivity = got.Data
 			settingsLock.Unlock()
 		}
 	}

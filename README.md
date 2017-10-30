@@ -184,3 +184,15 @@ docker cp CONTAINERID . /src/github.com/cgreenhalgh/lib-go-databox/
 ```
 
 (Note: `go get github.com/cgreenhalgh/lib-go-databox` will only get the default HEAD, not a branch)
+
+## more go notes
+
+GO dependency manager
+```
+go get -u github.com/golang/dep/cmd/dep
+```
+initially
+```
+dep init
+```
+
