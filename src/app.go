@@ -49,6 +49,15 @@ const (
 	DRIVER_OK 
 )
 
+type SyncStatus int
+
+const (
+	SYNC_IDLE = iota
+	SYNC_ACTIVE
+	SYNC_FAILURE
+	SYNC_SUCCESS
+)
+
 type Settings struct {
   Status DriverStatus
   Error string // if there is an error
@@ -58,6 +67,9 @@ type Settings struct {
   AthleteID string `json:"athlete_id"`
   Firstname string `json:"firstname"`
   Lastname string `json:"lastname"`
+  LastSync time.Time `json:"last_sync"` // e.g. "2013-08-24T00:04:12Z"
+  LastSyncStatus SyncStatus
+  LatestActivity StravaActivity
 }
 
 type State struct {
@@ -65,6 +77,7 @@ type State struct {
   AthleteID string `json:"athlete_id"`
   Firstname string `json:"firstname"`
   Lastname string `json:"lastname"`
+  LastSync time.Time `json:"last_sync"` // e.g. "2013-08-24T00:04:12Z"
 }
 
 func (state *State) Load() {
@@ -287,6 +300,11 @@ activityLoop:
 			log.Printf("Error writing new data item to store: %s (%s)", err.Error, string(dseData))
 			continue;
 		}
+		// latest?!
+		settingsLock.Lock()
+		settings.LatestActivity = activity
+		settingsLock.Unlock()
+		
 	}
 	
 	return true,nil
@@ -306,7 +324,19 @@ func (sw *SyncWorker) SyncWorkerServer() {
 			}
 		} else {
 			log.Print("Sync (internal)...")
+			settingsLock.Lock()
+			settings.LastSyncStatus = SYNC_ACTIVE
 			res, _ := syncInternal(accessToken)
+			if res {
+				settings.LastSyncStatus = SYNC_SUCCESS
+				now := time.Now()
+				settings.LastSync = now
+				state.LastSync = now
+				state.Save()
+			} else {
+				settings.LastSyncStatus = SYNC_FAILURE
+			}
+			settingsLock.Unlock()
 			// signal done
 			if req != nil {
 				req <- res
@@ -358,6 +388,7 @@ func loadSettings() {
 	settings.Firstname = state.Firstname
 	settings.Lastname = state.Lastname
 	settings.AthleteID = state.AthleteID
+	settings.LastSync = state.LastSync
 }
 
 func server(c chan bool) {
@@ -391,6 +422,30 @@ func logFatalError(message string, err error) {
 	settingsLock.Unlock()
 }
 
+func getLatestActivity() {
+	// latest value?
+	storeHref, _ := databox.GetStoreURLFromDsHref(dataStoreHref)
+	dsHref := storeHref + "/" + DS_ACTIVITIES
+	res,err := databox.StoreJSONGetlatest(dsHref)
+	if err != nil {
+		log.Printf("Error checking latest store entry: %s", err.Error())
+	} else {
+		//log.Printf("check %s JSON latest gave %s", dsHref, res);
+		got := []StravaActivityDSE{}
+		err = json.Unmarshal([]byte(res), &got)
+		if err != nil {
+			log.Printf("Error unmarshalling latest value(s): %s (%s)", err.Error(), res)
+		} else if len(got)==0 {
+			log.Printf("Warning: get latest -> no values (%s)", res);
+		} else {
+			log.Printf("Initialise latest to %s at %s (%s)", got[0].Data.Name, got[0].Data.StartDate, res)
+			settingsLock.Lock()
+			settings.LatestActivity = got[0].Data
+			settingsLock.Unlock()
+		}
+	}
+}
+
 func main() {
 
 	serverdone := make(chan bool)
@@ -420,6 +475,8 @@ func main() {
 	} else {
 		log.Printf("registered datasource %s", DS_ACTIVITIES)
 	}
+
+	getLatestActivity()
 
 	_ = <-serverdone
 }

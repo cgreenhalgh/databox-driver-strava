@@ -54,10 +54,13 @@ To copy files into the container:
 ```
 docker cp . CONTAINERID:/root/
 ```
+
 Try entering the container (you'll need to find its ID using `docker ps`).
 ```
 docker exec -it CONTAINERID /bin/sh
 ```
+Note, 2017-10-30 needs 'fixed' version of lib-go-databox, [here](https://github.com/cgreenhalgh/lib-go-databox/tree/store-json-extras).
+Check it out in /src/github.com/cgreenhalgh/lib-go-databox
 
 Build and run...
 ```

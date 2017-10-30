@@ -18,7 +18,10 @@
         <p>Status: {{ .Status }}</p>
         <script>var authUri="{{.AuthUri}}client_id={{.ClientID}}&"</script>
 	<input type="button" id="openStrava" value="Link to Strava account">
+	<p>Last sync: {{ .LastSync }}</p>
 	{{ if .Authorized }} <input type="button" id="poll" value="Sync data from Strava" onclick="return doSync(event);"> {{ end }} 
+	<p>Sync status: {{ .LastSyncStatus }}</p>
+	{{ if .LatestActivity }}<p>Latest activity: {{ .LatestActivity.Name}} at {{ .LatestActivity.StartDate }}</p>{{ end }}
         <script src="ui/static/js/vendor/jquery-1.11.2.min.js"></script>
         <script src="ui/static/js/main.js"></script>
     </body>
