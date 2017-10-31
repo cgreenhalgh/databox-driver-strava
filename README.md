@@ -52,7 +52,7 @@ no web server running to return a status?
 
 To copy files into the container:
 ```
-docker cp . CONTAINERID:/root/
+docker cp . CONTAINERID:/root/go/src/main/
 ```
 
 Try entering the container (you'll need to find its ID using `docker ps`).

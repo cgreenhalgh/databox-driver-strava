@@ -113,7 +113,7 @@ func (state *State) Save() {
 }
 
 var settingsLock = &sync.Mutex{}
-var settings = Settings{Status: DRIVER_STARTING, AuthUri: oauthUris.AuthUri, Authorized:false}
+var settings = Settings{Status: DRIVER_STARTING, AuthUri: oauthUris.AuthUri, Authorized:false, ClientID:""}
 var state = State{}
 
 type Athlete struct {
@@ -131,7 +131,7 @@ func handleOauthCode(code string) {
 	resp,err := http.PostForm(oauthUris.TokenUri, 
 		url.Values{"client_id":{oauthConfig.ClientID}, "client_secret":{oauthConfig.ClientSecret}, "code":{code}})
 	if err != nil {
-		log.Print("Error getting token\n")
+		log.Printf("Error getting token for code %s: %s\n", code, err.Error())
 		return
 	}
 	defer resp.Body.Close()
@@ -304,12 +304,13 @@ activityLoop:
 			log.Printf("Error writing new data item to store: %s (%s at %s)", err.Error, string(newValue), activity.StartDate)
 			continue;
 		}
-		// latest?!
-		settingsLock.Lock()
+		//log.Printf("written ok")
+		// latest?! NOTE: already holding settingsLock
 		settings.LatestActivity = activity
-		settingsLock.Unlock()
 		
+		//log.Printf("updated latest")
 	}
+	log.Printf("sync complete")
 	
 	return true,nil
 }

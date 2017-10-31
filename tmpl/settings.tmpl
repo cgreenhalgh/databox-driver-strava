@@ -13,6 +13,8 @@
         <script src="ui/static/js/vendor/modernizr-2.8.3.min.js"></script>
     </head>
     <body>
+    {{ if (eq "" .ClientID) }} <p>Error: driver is not configured with OAuth information</p> {{ else }} <p>OAuth ClientID: {{ .ClientID }}</p> {{ end }}
+    
     {{ if .Error }} <p>Error: {{ .Error }}</p> {{ end }}
         <h1>Hello {{.Firstname}} {{.Lastname}} ({{.AthleteID}})</h1>
         <p>Status: {{ .Status }}</p>
