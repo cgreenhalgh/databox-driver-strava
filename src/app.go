@@ -26,11 +26,46 @@ var dataStoreHref = os.Getenv("DATABOX_STORE_ENDPOINT")
 const STORE_TYPE = "store-json"
 
 const DS_ACTIVITIES = "activities"
+const DS_STATE = "state"
 
+// TODO any likely errors?!
 var activitiesTs,_ = databox.MakeStoreTimeSeries_0_2_0(dataStoreHref, DS_ACTIVITIES, STORE_TYPE)
+var stateKv,_ = databox.MakeStoreKeyValue_0_2_0(dataStoreHref, DS_STATE, STORE_TYPE)
+
+// startup state
+var started = false
+var startupLock = &sync.Mutex{}
+var startupCond = sync.NewCond(startupLock)
+
+func isStarted() bool {
+	startupLock.Lock()
+	defer startupLock.Unlock()
+	return started
+}
+
+func waitUntilStarted() {
+	startupLock.Lock()
+	defer startupLock.Unlock()
+	for !started {
+		startupCond.Wait()
+	}
+}
+
+func signalStarted() {
+	startupLock.Lock()
+	defer startupLock.Unlock()
+	started = true
+	startupCond.Broadcast()
+}
 
 func getStatusEndpoint(w http.ResponseWriter, req *http.Request) {
-	w.Write([]byte("active\n"))
+	startupLock.Lock()
+	defer startupLock.Unlock()
+	if started {
+		w.Write([]byte("active\n"))
+	} else {
+		w.Write([]byte("starting\n"))
+	}
 }
 
 type OauthUris struct {
@@ -86,17 +121,17 @@ type State struct {
 }
 
 func (state *State) Load() {
-	data,err := ioutil.ReadFile("etc/state.json")
+	data,err := stateKv.Read()
 	if err != nil {
-		log.Print("Unable to read etc/state.json\n")
+		log.Print("Unable to read state\n")
 		return
 	}
-	err = json.Unmarshal(data, &state)
+	err = json.Unmarshal([]byte(data), &state)
 	if err != nil {
 		log.Printf("Unable to unmarshall etc/state.json: %s\n", string(data))
 		return
 	}
-	log.Printf("Read etc/state.json: %s\n", string(data))
+	log.Printf("Read state: %s\n", string(data))
 }
 func (state *State) Save() {
 	data,err := json.Marshal(state)
@@ -104,12 +139,12 @@ func (state *State) Save() {
 		log.Printf("Unable to marshall state\n");
 		return
 	}
-	err = ioutil.WriteFile("etc/state.json", data, 0666);
+	err = stateKv.Write(string(data));
 	if err != nil {
-		log.Print("Error writing etc/state.json\n")
+		log.Print("Error writing state\n")
 		return
 	}
-	log.Print("Saved etc/state.json\n")
+	log.Print("Saved state\n")
 }
 
 var settingsLock = &sync.Mutex{}
@@ -168,6 +203,11 @@ func handleOauthCode(code string) {
 }
 
 func displayUI(w http.ResponseWriter, req *http.Request) {
+	if !isStarted() {
+		w.Write([]byte("starting...\n"))
+		return
+	}
+
 	// auth callback?
 	params := req.URL.Query()
 	codes := params["code"]
@@ -351,6 +391,11 @@ func (sw *SyncWorker) SyncWorkerServer() {
 }
 
 func doSync(w http.ResponseWriter, req *http.Request) {
+	if !isStarted() {
+		log.Print("ignore doSync when not started")
+		w.Write([]byte("false\n"))
+		return
+	}
 	log.Print("request sync...")
 	//rep := make(chan bool)
 	syncWorker.Requests <- nil //rep
@@ -455,10 +500,10 @@ func main() {
 	go server(serverdone)
 	go syncWorker.SyncWorkerServer()
 	
-	loadSettings()	
-
 	//Wait for my store to become active
 	databox.WaitForStoreStatus(dataStoreHref)
+
+	loadSettings()	
 
 	// register source
 	metadata := databox.StoreMetadata{
@@ -481,5 +526,8 @@ func main() {
 
 	getLatestActivity()
 
+	signalStarted()
+	log.Print("Driver has started")
+	
 	_ = <-serverdone
 }
