@@ -5,7 +5,7 @@
   branch = "abstract-api"
   name = "github.com/cgreenhalgh/lib-go-databox"
   packages = ["."]
-  revision = "dc949cc991ac4cd4e00236fc108084c3d2fa039d"
+  revision = "40847143cdd4a6a1ee44592b6f45b5b40c3989ac"
 
 [[projects]]
   name = "github.com/gorilla/context"
@@ -20,6 +20,12 @@
   version = "v1.5.0"
 
 [[projects]]
+  name = "github.com/me-box/lib-go-databox"
+  packages = ["."]
+  revision = "7b949c35785f7332060058e8c4563bc940b87651"
+  version = "0.2.0"
+
+[[projects]]
   branch = "master"
   name = "golang.org/x/net"
   packages = ["websocket"]
@@ -28,6 +34,6 @@
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "5170df99e1e4d1cf2ad2666ae4082aeafe9f9553c786dd2a32957d5fe25be64e"
+  inputs-digest = "2a7a335f99de986993d04d472e7a63e0f08b9c520b6c159161ec55f3e2d99066"
   solver-name = "gps-cdcl"
   solver-version = 1
