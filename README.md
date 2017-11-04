@@ -86,7 +86,7 @@ Will white-list localhost, but on phone that would have to be the App
 rather than in a browser (no implicit grant flow).
 
 Browser needs the authorization URL and the client_id and a few other
-required pameters (response_type=code, scope=view_private), while server
+required parameters (response_type=code, scope=view_private), while server
 also needs the token request URL and client_secret (plus the returned
 code) to complete the exchange and obtain the access token for subsequent
 calls.
@@ -94,6 +94,56 @@ calls.
 So, service config:
 - request_uri - minus client_id and redirect_uri value
 - token_uri - minus client_id, client_secret and code
+
+Oauth exchanges:
+- driver redirects to strava authorize with client_id, redirect url (which must match strava whitelist) and (optional) returned state
+- stava displays authorize page based on client_id; user logs in if not already
+- strava redirects (with 302) to redirect url with parameters state and code
+- driver posts to strava token with client_id, client_secret and code; gets back access token and athlete record
+- (access token provided on each API request to strava)
+
+Revocation with revoke user-specific access token.
+
+Hazzard(s):
+- imposter with client_id can trigger authorise request; redirect url must match specified (could be localhost) to get code; if browser is compliant then need to serve (or proxy if http) that redirect to capture code
+- if they don't have my client secret they can't get the actual token, but if they have then they have same access as the "legitimate" app and one can't be revoked without the other.
+- i'm only reading so it could be worse...
+
+Options:
+- each person creates their own app and input their own client id and secret into the driver
+- the driver ships with my client id and secret, and consequently other developers can easily get the same access
+- my client secret is available through some other restricted channel so that it is less likely to be appropriated (what channel?! and how much less likely??)
+
+Note, [runkeeper](https://runkeeper.com/developer/healthgraph/registration-authorization) is essentially the same (with one extra check, on redirect_url, when converting code to token).
+
+### Oauth intermediary
+
+Dom's [oauth intermediary](https://github.com/me-box/core-oauth-intermediary) 
+- page for external API (e.g. healthgraph)
+- call initially with param 'start'; redirects to external auth
+- handles redirects back with error by redirect to "origin_uri"
+- handles redirect with code by calling get token endpoint and returning token as data parameter in redirect to origin_uri
+- it has an internal key and encrypts origin uri -> state and vice versa
+
+So...
+- still has to end with redirect that will get back to original driver
+- return user token rather than code (client id and secret not required)
+- currently any client at all could use it (no checks at all, not even client id)
+- (current server config is HTTP only)
+- the server gets the access token and so could do whatever... but restrains and passes responsibility back to original client
+- no guarantee that initiator IS my app...but user will see /something/, then be prompted to give /my app/ access - consistency check?!
+
+Notes
+- could use own client secrets to time-limit new token grabs
+- could retain user token and act as api proxy, but then need to check each request
+- could require unique(ish) client id (could be allocated automatically) for use, and log use, and allow client revoke
+- could log use and allow blocking and rate limiting, e.g. by IP
+- could limit origin uri (lime redirect uri is limited) to limit exposure from hostile web sites
+- could/should refuse iframe?!
+
+Note: look at google info on oauth and not using embedded web views and how to redirect to app (also on iphone!)
+
+## Driver state
 
 App-specific service config:
 - client_id
