@@ -14,5 +14,5 @@
 .glide/
 
 # private config
-etc/oauth.json
+#etc/oauth.json
 etc/state.json
