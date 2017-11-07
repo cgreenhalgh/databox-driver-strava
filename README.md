@@ -66,8 +66,8 @@ it a lot then you may not be able to download new activities.
 You can link the driver to your own strava app by:
 
 1. Creating a [strava app](https://www.strava.com/settings/api). For the authorization callback domain put 'localhost'.
-1. Editing `databox-driver-strava/etc/oauth.json` and replacing the `client_id` and `client_secret` with the [values for your new app](https://www.strava.com/settings/api) ("Client ID", "Client Secret"; make sure you show them first!)
-1. Open the driver UI and "Link to Strava account" again.
+1. In the driver UI replacing the `client_id` and `client_secret` with the values for your new app and hitting "Configure"
+1. In the driver UI "Link to Strava account" again.
 
 ## Implementation notes
 
