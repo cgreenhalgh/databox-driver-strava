@@ -28,6 +28,8 @@ const STORE_TYPE = "store-json"
 const DS_ACTIVITIES = "activities"
 const DS_STATE = "state"
 
+const AUTH_REDIRECT_URL = "/#!/databox-driver-strava/ui"
+
 // TODO any likely errors?!
 var activitiesTs,_ = databox.MakeStoreTimeSeries_0_2_0(dataStoreHref, DS_ACTIVITIES, STORE_TYPE)
 var stateKv,_ = databox.MakeStoreKeyValue_0_2_0(dataStoreHref, DS_STATE, STORE_TYPE)
@@ -75,10 +77,13 @@ type OauthUris struct {
 
 var oauthUris = OauthUris{ AuthUri: "https://www.strava.com/oauth/authorize?response_type=code&scope=view_private&approval_prompt=force&state=oauth_callback&", TokenUri: "https://www.strava.com/oauth/token"}
 
+// just for defaults now
 type OauthConfig struct {
   ClientID string `json:"client_id"`
   ClientSecret string `json:"client_secret"`
 }
+
+var oauthDefaults OauthConfig
 
 type DriverStatus int
 
@@ -113,6 +118,8 @@ type Settings struct {
 }
 
 type State struct {
+  ClientID string `json:"client_id"`
+  ClientSecret string `json:"client_secret"`
   AccessToken string `json:"access_token"`
   AthleteID string `json:"athlete_id"`
   Firstname string `json:"firstname"`
@@ -164,7 +171,7 @@ type OauthTokenResp struct {
 
 func handleOauthCode(code string) {
 	resp,err := http.PostForm(oauthUris.TokenUri, 
-		url.Values{"client_id":{oauthConfig.ClientID}, "client_secret":{oauthConfig.ClientSecret}, "code":{code}})
+		url.Values{"client_id":{state.ClientID}, "client_secret":{state.ClientSecret}, "code":{code}})
 	if err != nil {
 		log.Printf("Error getting token for code %s: %s\n", code, err.Error())
 		return
@@ -195,6 +202,7 @@ func handleOauthCode(code string) {
 	//}
 	state.Save()
 	settings.Authorized = true
+	settings.Status = DRIVER_OK
 	settings.Firstname = state.Firstname
 	settings.Lastname = state.Lastname
 	settings.AthleteID = state.AthleteID
@@ -203,10 +211,7 @@ func handleOauthCode(code string) {
 }
 
 func displayUI(w http.ResponseWriter, req *http.Request) {
-	if !isStarted() {
-		w.Write([]byte("starting...\n"))
-		return
-	}
+	waitUntilStarted()
 
 	// auth callback?
 	params := req.URL.Query()
@@ -234,16 +239,61 @@ func displayUI(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 }
-/*
-func authCallback(w http.ResponseWriter, req *http.Request) {
-	url := req.URL.String()
-	ix := strings.LastIndex(url,"/")
-	log.Printf("url %s -> %s\n", url, string(url[0:ix+1]))
+
+func handleAuthCallback(w http.ResponseWriter, req *http.Request) {
+	waitUntilStarted()
+
+	// auth callback?
+	params := req.URL.Query()
+	codes := params["code"]
+	if codes != nil && len(codes)>0 {
+		log.Printf("Got oauth response code = %s\n", codes[0])
+		code := codes[0]
+		handleOauthCode(code)
+	}
+
+/*	errormsg := params["error"]
+	if errormsg != nil && len(errormsg)>0) {
+		log.Printf("Got oauth error response: %s", errormsg[0])
+	}
+*/	log.Printf("auth redirect  -> %s\n", AUTH_REDIRECT_URL)
 	// proxy defeats redirect?
 	//http.Redirect(w, req, string(url[0:ix]), 302)
-	w.Write([]byte("<html><head><meta http-equiv=\"refresh\" content=\"0; URL="+string(url[0:ix+1])+"\" /></head></html>"))
+	w.Write([]byte("<html><head><meta http-equiv=\"refresh\" content=\"0; URL="+AUTH_REDIRECT_URL+"\" /></head></html>"))
 }
-*/
+
+func handleConfigure(w http.ResponseWriter, req *http.Request) {
+	waitUntilStarted()
+
+	defer req.Body.Close()
+	body, err := ioutil.ReadAll(req.Body)
+	if err!=nil {
+		log.Printf("Error reading configure body: %s", err.Error())
+		w.WriteHeader(400)
+		return
+	}
+	var newConfig = OauthConfig{}
+	err = json.Unmarshal(body, &newConfig)
+	if err != nil {
+		log.Printf("Error parsing configure body (%s): %s", body, err.Error())
+		w.WriteHeader(400)
+		return
+	}
+	log.Printf("configure oauth client_id="+newConfig.ClientID)
+	settingsLock.Lock()
+	defer settingsLock.Unlock()
+	state.ClientID = newConfig.ClientID
+	state.ClientSecret = newConfig.ClientSecret
+	settings.ClientID = state.ClientID
+	settings.Status = DRIVER_UNAUTHORIZED
+	settings.Authorized = false
+	// discard old access token (presumable from old app)
+	state.AccessToken = ""
+	
+	state.Save()
+	
+	w.Write([]byte("true"))
+}
 
 type SyncWorker struct {
 	Requests chan chan bool
@@ -390,9 +440,9 @@ func (sw *SyncWorker) SyncWorkerServer() {
 	}
 }
 
-func doSync(w http.ResponseWriter, req *http.Request) {
+func handleSync(w http.ResponseWriter, req *http.Request) {
 	if !isStarted() {
-		log.Print("ignore doSync when not started")
+		log.Print("ignore handleSync when not started")
 		w.Write([]byte("false\n"))
 		return
 	}
@@ -401,14 +451,12 @@ func doSync(w http.ResponseWriter, req *http.Request) {
 	syncWorker.Requests <- nil //rep
 	w.Write([]byte("true\n"))
 	//<- rep
-	//log.Print("doSync complete");
+	//log.Print("handleSync complete");
 }
 
 type data struct {
 	Data string `json:"data"`
 }
-
-var oauthConfig OauthConfig
 
 func loadSettings() {
 	settingsLock.Lock()
@@ -421,19 +469,28 @@ func loadSettings() {
 		settings.Error = "The driver was not build correctly (unable to read etc/oauth.json)"
 		return
 	}
-	err = json.Unmarshal(data, &oauthConfig)
+	err = json.Unmarshal(data, &oauthDefaults)
 	if err != nil {
 		log.Printf("Unable to unmarshall etc/oauth.json: %s\n", string(data))
 		settings.Status = DRIVER_FATAL
 		settings.Error = "The driver was not build correctly (unable to unmarshall etc/oauth.json)"
 		return
 	}
-	log.Printf("oauth config client ID %s\n", oauthConfig.ClientID)
-	settings.ClientID = oauthConfig.ClientID
+	log.Printf("oauth default config client ID %s\n", oauthDefaults.ClientID)
 	
 	state.Load()
+	// defaults
+	if len(state.ClientID)==0 {
+		state.ClientID = oauthDefaults.ClientID
+		state.ClientSecret = oauthDefaults.ClientSecret
+	}
+	log.Printf("oauth config from state %s\n", state.ClientID)
+	settings.ClientID = state.ClientID
 	if len(state.AccessToken)>0 {
 		settings.Authorized = true
+		settings.Status = DRIVER_OK
+	} else {
+		settings.Status = DRIVER_UNAUTHORIZED
 	}
 	settings.Firstname = state.Firstname
 	settings.Lastname = state.Lastname
@@ -448,9 +505,10 @@ func server(c chan bool) {
 	router := mux.NewRouter()
 
 	router.HandleFunc("/status", getStatusEndpoint).Methods("GET")
-	//router.HandleFunc("/ui/auth_callback", authCallback).Methods("GET")
+	router.HandleFunc("/ui/auth_callback", handleAuthCallback).Methods("GET")
 	router.HandleFunc("/ui", displayUI).Methods("GET")
-	router.HandleFunc("/ui/api/sync", doSync).Methods("POST")
+	router.HandleFunc("/ui/api/sync", handleSync).Methods("POST")
+	router.HandleFunc("/ui/api/configure", handleConfigure).Methods("POST")
 
 	static := http.StripPrefix("/ui/static", http.FileServer(http.Dir("./www/")))
 	router.PathPrefix("/ui/static").Handler(static)

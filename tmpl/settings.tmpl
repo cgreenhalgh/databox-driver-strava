@@ -13,17 +13,36 @@
         <script src="ui/static/js/vendor/modernizr-2.8.3.min.js"></script>
     </head>
     <body>
-    {{ if (eq "" .ClientID) }} <p>Error: driver is not configured with OAuth information</p> {{ else }} <p>OAuth ClientID: {{ .ClientID }}</p> {{ end }}
-    
+    <h1>Strava Driver</h1>
+
     {{ if .Error }} <p>Error: {{ .Error }}</p> {{ end }}
-        <h1>Hello {{.Firstname}} {{.Lastname}} ({{.AthleteID}})</h1>
-        <p>Status: {{ .Status }}</p>
-        <script>var authUri="{{.AuthUri}}client_id={{.ClientID}}&"</script>
-	<input type="button" id="openStrava" value="Link to Strava account">
-	<p>Last sync: {{ .LastSync }}</p>
+    <script>var authUri="{{.AuthUri}}client_id={{.ClientID}}&"</script>
+
+    <table><tbody>
+    <tr><td colspan="2"><input value="Refresh" onclick="return reload(event);" type="button"></td></tr>
+
+    <tr><td colspan="2"><h2>Sync Data</h2></td></tr>
+    <tr><td>Sync status:</td><td>{{.LastSyncStatus}}: <script>var SST=["IDLE","ACTIVE","FAILURE","SUCCESS"]; document.write(SST[{{.LastSyncStatus}}]);</script></td></tr>
+	<tr><td>Last sync:</td><td>{{ .LastSync }}</tr></td>
+	<tr><td>Latest activity:</td><td>{{ if .LatestActivity }}{{ .LatestActivity.Name}} at {{ .LatestActivity.StartDate }}{{ end }}</td></tr>
+    <tr><td colspan="2">	
 	{{ if .Authorized }} <input type="button" id="poll" value="Sync data from Strava" onclick="return doSync(event);"> {{ end }} 
-	<p>Sync status: {{ .LastSyncStatus }}</p>
-	{{ if .LatestActivity }}<p>Latest activity: {{ .LatestActivity.Name}} at {{ .LatestActivity.StartDate }}</p>{{ end }}
+	</td></tr>
+
+    <tr><td colspan="2"><h2>User Authorization</h2></td></tr>
+    <tr><td>Status:</td><td>{{.Status}}: <script>var ST=["STARTING","FATAL","UNAUTHORIZED","OK"]; document.write(ST[{{.Status}}]);</script></td></tr>
+    <tr><td>Athlete ID</td><td>{{.AthleteID}}</td></tr>
+    <tr><td>Name</td><td>{{.Firstname}} {{.Lastname}}</td></tr>
+    <tr><td colspan="2"><input type="button" id="openStrava" value="Link to Strava account"></td></tr>
+    <tr><td colspan="2"><em>Note: linking to a new strava account will only work from a local browser on the machine running Databox.</em></td></tr>
+    
+    <tr><td colspan="2"><h2>Oauth Configuration</h2></td></tr>
+    <tr><td>Client ID</td><td><input id="client_id" name="client_id" value="{{.ClientID}}"></td></tr>
+    <tr><td>Client Secret</td><td><input id="client_secret" name="client_secret" value="" placeholder="(current value is hidden)"></td></tr>
+    <tr><td colspan="2"><input type="button" id="configure" value="Configure Oauth" onclick="return configure(event);"></td></tr>
+    <tr><td colspan="2"><em>Optional: see documentation for details.</em></td></tr>
+    
+	</tbody></table>
         <script src="ui/static/js/vendor/jquery-1.11.2.min.js"></script>
         <script src="ui/static/js/main.js"></script>
     </body>
