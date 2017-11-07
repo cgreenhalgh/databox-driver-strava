@@ -18,7 +18,7 @@ Roadmap:
 ### Activities
 
 This driver downloads your activities from Strava into a time-series in Databox. 
-- datasource ID: `activities`
+- datasource type: `Strava-Activity`
 - store type: `store-json`
 - API: time-series
 - content type: `application/json`
