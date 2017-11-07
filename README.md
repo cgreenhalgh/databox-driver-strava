@@ -5,12 +5,13 @@ Databox driver for the Strava API
 By Chris Greenhalgh <chris.greenhalgh@nottingham.ac.uk>,
 Copyright (C) The University of Nottingham, 2017
 
-Status: just about working
+Status: working for limited information about activities 
 
 Roadmap:
-- fix driver UI to auto-update status
-- allow oauth configuration to be set from UI
 - support oauth from databox app (requires changes to app)
+- ? make it more efficient
+- auto-poll at specified time(s)
+- sync more information from strava
 
 ## Data sources
 

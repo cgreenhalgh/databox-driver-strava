@@ -5,7 +5,7 @@ $( document ).ready(function() {
 
 $( '#openStrava' ).on('click', function(event) {
 	event.preventDefault();
-	console.log('open '+authUri+' '+window.parent.location.href);
+	console.log('open '+authUri+' parent='+window.parent.location.href+' (location='+location.href+')');
 	// databox pages don't pass through parameters to driver view
 	var directUri = String(window.parent.location.href).replace('#!/', '');
 	var ix = directUri.indexOf('?');
