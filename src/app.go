@@ -252,11 +252,11 @@ func handleAuthCallback(w http.ResponseWriter, req *http.Request) {
 		handleOauthCode(code)
 	}
 
-/*	errormsg := params["error"]
-	if errormsg != nil && len(errormsg)>0) {
+	errormsg := params["error"]
+	if errormsg != nil && len(errormsg)>0 {
 		log.Printf("Got oauth error response: %s", errormsg[0])
 	}
-*/	log.Printf("auth redirect  -> %s\n", AUTH_REDIRECT_URL)
+	log.Printf("auth redirect  -> %s\n", AUTH_REDIRECT_URL)
 	// proxy defeats redirect?
 	//http.Redirect(w, req, string(url[0:ix]), 302)
 	w.Write([]byte("<html><head><meta http-equiv=\"refresh\" content=\"0; URL="+AUTH_REDIRECT_URL+"\" /></head></html>"))
